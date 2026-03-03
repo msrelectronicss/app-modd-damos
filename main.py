@@ -285,7 +285,186 @@ def build_parser() -> argparse.ArgumentParser:
                            help="Patch format (default: bmp)")
     pt_create.add_argument("-o", "--output", default=None)
 
+    # --- ecu-info ---
+    p_ei = sub.add_parser("ecu-info", help="Detect ECU and show VIN, SW, HW")
+    p_ei.add_argument("file", help="ECU ROM binary")
+    p_ei.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # --- tune ---
+    p_tn = sub.add_parser("tune", help="Apply Stage 1/2/3 performance remap")
+    p_tn.add_argument("file", help="ECU ROM binary")
+    p_tn.add_argument("--stage", type=int, choices=[1, 2, 3], required=True,
+                      help="Tuning stage (1, 2, or 3)")
+    p_tn.add_argument("-o", "--output", default=None,
+                      help="Output file (default: <file>.staged.bin)")
+    p_tn.add_argument("--backup", action="store_true",
+                      help="Create a .bak copy before writing")
+
+    # --- pops ---
+    p_pb = sub.add_parser("pops", help="Configure Pops & Bang / exhaust crackle")
+    p_pb.add_argument("file", help="ECU ROM binary")
+    p_pb.add_argument("--level", choices=["off", "mild", "medium", "aggressive"],
+                      default="medium", help="Intensity (default: medium)")
+    p_pb.add_argument("-o", "--output", default=None)
+    p_pb.add_argument("--backup", action="store_true")
+
+    # --- cancel ---
+    p_ca = sub.add_parser("cancel", help="Apply ECU cancellations / deletes")
+    p_ca.add_argument("file", help="ECU ROM binary")
+    p_ca.add_argument("--list", action="store_true",
+                      help="List available cancellations for this ECU and exit")
+    p_ca.add_argument(
+        "--cancels", nargs="+", default=[],
+        metavar="CANCEL",
+        help=(
+            "One or more cancellations to apply: "
+            "egr dpf lambda swirl sap vmax torque rpm adblue cat sai"
+        )
+    )
+    p_ca.add_argument("-o", "--output", default=None)
+    p_ca.add_argument("--backup", action="store_true")
+
     return parser
+
+
+# =============================================================================
+# ECU tuning commands
+# =============================================================================
+
+def cmd_ecu_info(args) -> None:
+    """Detect ECU and display VIN / SW / HW information."""
+    from core.ecu_info import ECUInfoExtractor
+    import json
+
+    (fp,) = _require_file(args.file)
+    data  = fp.read_bytes()
+    ext   = ECUInfoExtractor()
+    rep   = ext.detect(data)
+
+    if args.json:
+        print(json.dumps(rep.to_dict(), indent=2))
+    else:
+        print(rep)
+
+
+def cmd_tune(args) -> None:
+    """Apply a Stage 1/2/3 remap to an ECU binary."""
+    from core.tune_engine import TuneEngine
+    from formats.ecu_profiles import StageLevel
+    from utils.file_utils import backup_file, safe_write
+
+    (fp,) = _require_file(args.file)
+    data  = fp.read_bytes()
+
+    stage = StageLevel(args.stage)
+    eng   = TuneEngine()
+    result= eng.apply_stage(data, stage)
+
+    print(result.log)
+    if result.warnings:
+        for w in result.warnings:
+            print(f"[WARN] {w}")
+
+    out = Path(args.output) if args.output else fp.with_suffix(f".stage{args.stage}.bin")
+    if args.backup and fp.exists():
+        bak = backup_file(fp)
+        print(f"Backup: '{bak}'")
+    safe_write(out, result.data)
+    print(f"\nGuardado: '{out}'  ({len(result.data):,} bytes)")
+
+
+def cmd_pops(args) -> None:
+    """Apply Pops & Bang configuration to an ECU binary."""
+    from core.pops_bang import PopsBangEngine
+    from formats.ecu_profiles import PopsBangLevel
+    from utils.file_utils import backup_file, safe_write
+
+    _LEVEL_MAP = {
+        "off":        PopsBangLevel.OFF,
+        "mild":       PopsBangLevel.MILD,
+        "medium":     PopsBangLevel.MEDIUM,
+        "aggressive": PopsBangLevel.AGGRESSIVE,
+    }
+
+    (fp,) = _require_file(args.file)
+    data  = fp.read_bytes()
+    level = _LEVEL_MAP[args.level]
+
+    eng    = PopsBangEngine()
+    result = eng.apply(data, level)
+
+    print(result.log)
+    if result.warnings:
+        for w in result.warnings:
+            print(f"[WARN] {w}")
+
+    out = Path(args.output) if args.output else fp.with_suffix(".pops.bin")
+    if args.backup and fp.exists():
+        backup_file(fp)
+    safe_write(out, result.data)
+    print(f"\nGuardado: '{out}'")
+
+
+def cmd_cancel(args) -> None:
+    """Apply ECU cancellations / deletes."""
+    from core.anulaciones import AnulacionEngine, all_cancellations_for
+    from formats.ecu_profiles import Cancellation, get_profile
+    from utils.file_utils import backup_file, safe_write
+
+    _CANCEL_MAP = {
+        "egr":    Cancellation.EGR,
+        "dpf":    Cancellation.DPF,
+        "lambda": Cancellation.LAMBDA,
+        "swirl":  Cancellation.SWIRL_FLAP,
+        "sap":    Cancellation.SAP,
+        "vmax":   Cancellation.SPEED_LIMITER,
+        "torque": Cancellation.TORQUE_LIMIT,
+        "rpm":    Cancellation.RPM_LIMIT,
+        "adblue": Cancellation.ADBLUE,
+        "cat":    Cancellation.CAT,
+        "sai":    Cancellation.SAI,
+    }
+
+    (fp,) = _require_file(args.file)
+    data  = fp.read_bytes()
+
+    if args.list:
+        profile = get_profile(data)
+        if profile:
+            print(f"ECU: {profile.name}")
+            print("Cancellaciones disponibles:")
+            for c in all_cancellations_for(profile):
+                spec = profile.cancellations[c]
+                print(f"  {c.value:<16}  {spec.name}")
+        else:
+            print("ECU no reconocida. Las cancellaciones disponibles son:")
+            for key in _CANCEL_MAP:
+                print(f"  {key}")
+        return
+
+    cancels = []
+    for key in args.cancels:
+        if key not in _CANCEL_MAP:
+            sys.exit(f"[ERROR] Cancellación desconocida: '{key}'. "
+                     f"Válidas: {', '.join(_CANCEL_MAP)}")
+        cancels.append(_CANCEL_MAP[key])
+
+    if not cancels:
+        sys.exit("[ERROR] Especifica al menos una cancellación con --cancels")
+
+    eng    = AnulacionEngine()
+    result = eng.apply(data, cancels)
+
+    print(result.log)
+    if result.warnings:
+        for w in result.warnings:
+            print(f"[WARN] {w}")
+
+    out = Path(args.output) if args.output else fp.with_suffix(".cancel.bin")
+    if args.backup and fp.exists():
+        backup_file(fp)
+    safe_write(out, result.data)
+    print(f"\nGuardado: '{out}'")
 
 
 # =============================================================================
@@ -302,6 +481,10 @@ _COMMANDS = {
     "extract":  cmd_extract,
     "inject":   cmd_inject,
     "patch":    cmd_patch,
+    "ecu-info": cmd_ecu_info,
+    "tune":     cmd_tune,
+    "pops":     cmd_pops,
+    "cancel":   cmd_cancel,
 }
 
 

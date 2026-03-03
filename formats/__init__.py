@@ -11,15 +11,30 @@ from formats.base_format import (
     ParseError,
     ValidationError,
 )
-from formats.elf_format import ELFFormat
 from formats.ecu_bin import ECUBinFormat
-from formats.firmware_bin import FirmwareBinFormat
 
-# Register all bundled formats with the global registry
+# Optional formats — loaded only when the file exists
+try:
+    from formats.elf_format import ELFFormat
+    _has_elf = True
+except ImportError:
+    ELFFormat = None   # type: ignore
+    _has_elf = False
+
+try:
+    from formats.firmware_bin import FirmwareBinFormat
+    _has_fw = True
+except ImportError:
+    FirmwareBinFormat = None   # type: ignore
+    _has_fw = False
+
+# Register all available formats with the global registry
 _registry = FormatRegistry()
-_registry.register(ELFFormat)
 _registry.register(ECUBinFormat)
-_registry.register(FirmwareBinFormat)
+if _has_elf and ELFFormat:
+    _registry.register(ELFFormat)
+if _has_fw and FirmwareBinFormat:
+    _registry.register(FirmwareBinFormat)
 
 
 def get_registry() -> FormatRegistry:
@@ -39,9 +54,10 @@ __all__ = [
     "FormatError",
     "ParseError",
     "ValidationError",
-    # Concrete formats
-    "ELFFormat",
+    # Concrete formats (always present)
     "ECUBinFormat",
+    # Optional (None if not installed)
+    "ELFFormat",
     "FirmwareBinFormat",
     # Convenience
     "get_registry",

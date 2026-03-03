@@ -52,9 +52,8 @@ def cmd_gui(_args) -> None:
     except ImportError as exc:
         sys.exit(f"[ERROR] Cannot start GUI: {exc}")
 
-    root = tk.Tk()
-    app = MainWindow(root)
-    root.mainloop()
+    app = MainWindow()
+    app.root.mainloop()
 
 
 def cmd_hex(args) -> None:
@@ -69,10 +68,9 @@ def cmd_hex(args) -> None:
 
     cfg = HexConfig(
         bytes_per_row=args.width,
-        use_color=sys.stdout.isatty(),
-        base_offset=start,
+        use_colors=sys.stdout.isatty(),
     )
-    print(HexEngine(cfg).render(chunk))
+    print(HexEngine(cfg).display(chunk, start=start))
 
 
 def cmd_info(args) -> None:

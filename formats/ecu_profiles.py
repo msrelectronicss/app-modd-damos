@@ -955,12 +955,264 @@ PROFILE_MARELLI = ECUProfile(
 )
 
 
+# ---------------------------------------------------------------------------
+# Bosch ME7.5  –  1024 KB (1 MB) broadband lambda binaries
+# VW/Audi/Seat 1.8T 150/180 hp with Bosch LSU4 wideband sensor
+#
+# Contains factory-verified code blocks for:
+#   • Launch Control (pops & bangs on A/C switch)   0xA5900
+#   • Multi-Map switching (6 maps via A/C / input)  0xB0200 …
+#   • Ignition maps 1-4                             0xFE250, 0xFE350, 0xFE450, 0xFE550
+#   • KFZW helper pointer                           0xFE700, 0xFE7E0
+# ---------------------------------------------------------------------------
+
+# Launch control + pops-on-A/C-switch machine-code block (0xA5900, 1024KB ME7.5)
+_ME75_LAUNCH_CTRL_CODE = bytes.fromhex(
+    "FFFF"
+    "DA8A945D DA8A285B DA8A3259 FA828E26 DB00"
+    "DA8AA059 FA876613 DB00"
+    "DA8A5C5D DA8A4A5B FA82D825 DB00 FA827C28 DB00"
+    "D70038 00F78E0460 D7008A00 F3F8F35D 4980BD01 E108"
+    "D70038 00F7F80260 D7008A00 F3F8F45D 4980BD01 E108"
+    "D70038 00F7F80160 D7008A00 F3F8F95D 4980BD01 E108"
+    "D70038 00F7F80360 D70038 00F78E0060 D7008A00 F3F8FE5D"
+    "3D08"
+    "D7008A00 F2F4EC5D D70038 00F6F4D43B DB00"
+    "9A276330 D70038 00F3F84F48 D7008A00 43F8F25D"
+    "9D2FF2F59EF8 D70038 00F2F4D43B 40549D0B"
+    "D7008A00 22F4F05D 40548D21"
+    "D70038 00F3F80160 0D0A"
+    "D7008A00 02F4EE5D 40549D09"
+    "D70038 00F3F80260 D70038 00F7F80460"
+    "0D40 E7F88000 75F8C2F7 E7F89A00 F7F8C3F7"
+    "D70038 00F78E0460 0D37"
+    "9A27 2930 8A272210 F2F49EF8"
+    "D7008A00 42F4F65D FD1B F3F8B189"
+    "D7008A00 43F8F55D FD14"
+    "D70038 00F3F80060 D7008A00 43F8F85D 9D14 0981"
+    "D70038 00F7F80060 D70038 00F3F80360 2DCE0DC8"
+    "D70038 00F78F0060 0D04"
+    "D70038 00F78E0060 D70038 00F78E0460"
+    "E7F87F00 65F8C2F7 DB00"
+    "D70038 00F3F80460 2D0A"
+    "F7F8988B F7F8998B F7F89A8B F7F89B8B F7F80CFA"
+    "E6FC988B DB00"
+    "F3F8C2F7 67F88000 2D02 FA876860 5F3A FA876A60 DB00"
+    "D70038 00F2F40660 3D03 3A1366 23DB00"
+    "4980 3D03 3A136623 0D05"
+    "9AF402703E660D013F66 4990 2D05 9AF402F02E660D012F66"
+    "DB00 B4003BF8"
+    "D70038 00F2F40660 3D01 DB00"
+    "F3FA3BF8 4980 2D05 9AF402703FF50D013EF5"
+    "4990 2D05 9AF402F02FF50D012EF5"
+    "F7FA3BF8 DB00"
+    "D70038 00F68E0660 D70038 00F68E0860"
+    "D70038 00F68E0A60 D70038 00F68E0C60 DB00"
+    "D70038 00F2F40660 2D4C"
+    "4980 2D22 9AF40970 2981 47F88000 ED1C"
+    "D70038 00F3F80960 0D17"
+    "2981 4980 3D14 D70038 00F3F80C60 2D0A"
+    "03F81EFF D70038 00F7F80C60 3D03 F3F81CFF 0D05"
+    "D70038 00F3F80860 7FF4"
+    "4990 2D22 9AF409F02991 47F98000 ED1C"
+    "D70038 00F3F90B60 0D17"
+    "2991 4990 3D14 D70038 00F3F90D60 2D0A"
+    "03F91EFF D70038 00F7F90D60 3D03 F3F91CFF 0D05"
+    "D70038 00F3F90A60 FFF4"
+    "D70038 00F6F40660 DB00"
+    "D70038 00F7F80C60 DB00 D70038 00F7F80960"
+    "D70038 00F7F90860 77F98000 D70038 00F7F90660 DB00"
+    "D70038 00F68E0860 D70038 00F78E0660 D70038 00F78E0C60 DB00"
+    "D70038 00F7F80D60 DB00 D70038 00F7F80B60"
+    "D70038 00F7F90A60 77F98000 D70038 00F7F90760 DB00"
+    "D70038 00F68E0A60 D70038 00F78E0760 D70038 00F78E0D60 DB00"
+    "D70038 00F3F80F60 2D0F"
+    "D70038 00F3F91060 23F91EFF"
+    "D7008A00 43F9FF5D ED3C"
+    "D70038 00F7F91060 F198 67F97F00"
+    "D7008A00 43F9005E 9D0E 8A272E30 9A270410 8AF43470 7FF4"
+    "0D2E 9AF43070 7EF4 23F81EFF 0D28"
+    "D7008A00 43F9015E 9D27 8A271B10 9A270430 8AF42170 7FF4"
+    "0D1B 9AF41D70 7EF4 23F81EFF"
+    "D7008A00 43F8015E 3D11 E118"
+    "D70038 0075F80E60 D7008A00 F2F4025E DA8AF85B"
+    "D70038 00F78E1060 F3F81CFF D70038 00F7F80F60 DB00"
+    "9A271B10 F2F49EF8 D7008A00 42F4FA5D ED08"
+    "D7008A00 42F4FC5D 8D03 46F4A00F 9D02 E6F4B036"
+    "D70038 00F6F4D43B D70038 00F78E0E60 DA8A165C DB00"
+    "D7008A00 F3F8FE5D 2D16"
+    "D70038 0043F84F48 FD0B"
+    "D70038 00F3F80E60 3D03 DA8A725C 0D09 DA8A205D 0D06"
+    "D70038 00F78E0E60 DA8A165C DB00"
+    "D70038 00F78E0E60 D70038 00F78E0F60 D70038 00F78E1060"
+    "D7008A00 F3F8FE5D 2D17"
+    "D70038 00F2F4D43B D7008A00 42F4FA5D ED08"
+    "D7008A00 42F4FC5D 8D03 46F4A00F 9D06 E6F4B036"
+    "D70038 00F6F4D43B DB00"
+    "FFFFFFFFFFFF"
+    "B036 9001 9001 03D8 E5CC 803E 1200 F055 7017 0350 0205 0303"
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+    .replace(" ", "")
+)
+
+# Multi-Map block 2 – 0xB0200 (pointer at 0xB0200 = DA 8B 00 02)
+_ME75_MMAP2_CODE = bytes.fromhex(
+    "D740E100 F2F40230 46F434122D17 E6F43412"
+    "D740E100 F6F40230 D740E100 F68E0830 E014"
+    "D740E100 F6F4FA30 D740E100 F6F40A30"
+    "D740E100 F68E0030 D740E100 F2F40030 42F41CFF"
+    "2D07 8A2630E0 D740E100 F68E0030 0D2B"
+    "9A2629E0 D740E100 F68F0030"
+    "F2F42E9C 46F4FFE6 8D20"
+    "D740E100 F2F4FA30 4841 3D02 E024 0D05 4842 3D02 E034 0D01 E014"
+    "D740E100 F6F4FA30 F2F59EF8 46F5C800 ED01 5C14"
+    "D740E100 F6F40830 E014 D740E100 F6F40A30"
+    "DA8F00FA E6FC0027 E6FD3F02 F0FE"
+    "D740E100 C2FEFA30 DA82F05E DB00 DB00 FFFFFFFF"
+    .replace(" ", "")
+)
+
+# Multi-Map block 4 – 0xB0400
+_ME75_MMAP4_CODE = bytes.fromhex(
+    "E6FCE027 E6FD3F02 F0FE D740E100 C2FEFA30 DA82F05E DB00 DB00"
+    "FFFFFFFFFFFF"
+    .replace(" ", "")
+)
+
+# Ignition map 1 (Map A, 16×12) – 0xFE250
+_ME75_KFZW1 = bytes.fromhex(
+    "1D15110C09070603000000001F16120D0B0A06040000000021171412"
+    "0F0C09050200010025 1A191816141 10C08060602281B1A1A181513100C090A06"
+    "2A1E1D1D1A17151 10E0C0A092D201F1F1C181714100D0B0A302323232 11E1C19"
+    "14110E0D342A2A2926232 11F1C1713103 62F2C2B2A262522 1F1A16123 83 82F2E"
+    "2B282624221B18153 83 82E2E2B2A2925241414143 83 82E2E2B2B2A2625"
+    "141414383 82E2E2D2D2C29261414143 83 8303 02E2E2E2D2B141414"
+    "35353 030302E2E2F2E2814141 4"
+    .replace(" ", "")
+)
+
+# Ignition map 2 (Map B, 16×12) – 0xFE350
+_ME75_KFZW2 = bytes.fromhex(
+    "1B1B181 20C0906030000000028281B160E0A07030000 00002D2D1C1A130B0805"
+    "010000002F2F211F1C120A070300002F2F2420 1B130C08040000002F2F26211B16"
+    "110C070403022F2F27221D18130E0A0807062F2F2925 1F1A16110E0B09082F2F"
+    "2C2A2722 1F1A1614110E2F2F2F2E2B262 31F1C1916123232302F2C282522"
+    "1F191919323 22F2E2C292624221919193333 2F2E2C2A282624191919"
+    "34342F2E2D2C2A2824191919 34343 030313 02F2D261919193535"
+    "303033333231281919 19"
+    .replace(" ", "")
+)
+
+# Add a new ECU family enum value: we reuse BOSCH_ME7 for ME7.5
+# ME7.5 1024KB specific profile
+_ME75_MAPS: Dict[str, MapSpec] = {
+    **_ME7_MAPS,
+    # Override KFZW with correct ME7.5 1024KB offset hints
+    "KFZW": MapSpec(
+        name="KFZW", description="Base Ignition Timing Map A (16×12) @ 0xFE250",
+        category=MapCategory.IGNITION,
+        rows=16, cols=12, element_size=1, signed=False,
+        factor=0.75, bias=0.0, units="°BTDC",
+        phys_min=0.0, phys_max=62.0,
+        hint_offset=0xFE250,
+    ),
+    "KFZW_B": MapSpec(
+        name="KFZW_B", description="Ignition Timing Map B (16×12) @ 0xFE350",
+        category=MapCategory.IGNITION,
+        rows=16, cols=12, element_size=1, signed=False,
+        factor=0.75, bias=0.0, units="°BTDC",
+        phys_min=0.0, phys_max=62.0,
+        hint_offset=0xFE350,
+    ),
+    "KFZW_C": MapSpec(
+        name="KFZW_C", description="Ignition Timing Map C (16×12) @ 0xFE450",
+        category=MapCategory.IGNITION,
+        rows=16, cols=12, element_size=1, signed=False,
+        factor=0.75, bias=0.0, units="°BTDC",
+        phys_min=0.0, phys_max=62.0,
+        hint_offset=0xFE450,
+    ),
+    "KFZW_D": MapSpec(
+        name="KFZW_D", description="Ignition Timing Map D (16×12) @ 0xFE550",
+        category=MapCategory.IGNITION,
+        rows=16, cols=12, element_size=1, signed=False,
+        factor=0.75, bias=0.0, units="°BTDC",
+        phys_min=0.0, phys_max=62.0,
+        hint_offset=0xFE550,
+    ),
+}
+
+_ME75_CANCELLATIONS: Dict[Cancellation, CancellationSpec] = {
+    **_ME7_CANCELLATIONS,
+    # --- ME7.5 specific patches ---
+    Cancellation.SAP: CancellationSpec(
+        name="SAP Delete + Launch Control (A/C switch)",
+        description=(
+            "Escribe el bloque de código de Launch Control + Pops (A/C switch) "
+            "en 0xA5900 y activa el pointer en 0xB0200. "
+            "Requiere ROM 1024 KB (broadband lambda)."
+        ),
+        cancellation=Cancellation.SAP,
+        patches=[
+            # (hint_offset, pattern_to_search, replacement)
+            # Write launch control block at 0xA5900
+            (0xA5900, b"\xFF\xFF\xFF\xFF",    _ME75_LAUNCH_CTRL_CODE[:4]),
+            # Write multi-map block 2 at 0xB0200
+            (0xB0200, b"\xFF\xFF\xFF\xFF",    _ME75_MMAP2_CODE[:4]),
+            # Write multi-map block 4 at 0xB0400
+            (0xB0400, b"\xFF\xFF\xFF\xFF",    _ME75_MMAP4_CODE[:4]),
+        ],
+        dtc_disable=True,
+    ),
+}
+
+# ME7.5 stages inherit from ME7 but with updated power estimates
+_ME75_STAGES: Dict[StageLevel, StageSpec] = {
+    StageLevel.STAGE1: StageSpec(
+        level=StageLevel.STAGE1,
+        description="Stage 1 – Remap software only. Banda ancha, mapas KFZW optimizados.",
+        boost_pct=18.0, fuel_pct=10.0, ignition_deg=2.0,
+        torque_pct=22.0, rpm_raise=300, remove_vmax=True,
+        power_gain_hp=35, torque_gain_nm=65,
+    ),
+    StageLevel.STAGE2: StageSpec(
+        level=StageLevel.STAGE2,
+        description='Stage 2 – Intake K&N, intercooler grande, escape 3", EGR off.',
+        boost_pct=32.0, fuel_pct=18.0, ignition_deg=3.0,
+        torque_pct=45.0, rpm_raise=500, remove_vmax=True,
+        power_gain_hp=65, torque_gain_nm=105,
+    ),
+    StageLevel.STAGE3: StageSpec(
+        level=StageLevel.STAGE3,
+        description="Stage 3 – Turbo GT28/GT30, inyectores 440 cc, forjado.",
+        boost_pct=55.0, fuel_pct=35.0, ignition_deg=2.0,
+        torque_pct=80.0, rpm_raise=800, remove_vmax=True,
+        power_gain_hp=130, torque_gain_nm=185,
+    ),
+}
+
+PROFILE_BOSCH_ME75_1024 = ECUProfile(
+    name="Bosch ME7.5 – 1024 KB broadband (Launch Ctrl + Multi-Map)",
+    family=ECUFamily.BOSCH_ME7,
+    file_sizes=[1048576],                              # 1024 KB
+    identification_strings=[b"ME7.5", b"0 261 2"],
+    vin_offset=0, sw_offset=0, hw_offset=0, cal_id_offset=0,
+    checksum_regions=[(0x0000, 0xFFFF0)],
+    checksum_offset=0xFFFF0,
+    checksum_algo="sum32",
+    maps=_ME75_MAPS,
+    cancellations=_ME75_CANCELLATIONS,
+    stages=_ME75_STAGES,
+)
+
+
 # ===========================================================================
 # Registry
 # ===========================================================================
 
 #: All known profiles, ordered from most to least specific
 ALL_PROFILES: List[ECUProfile] = [
+    PROFILE_BOSCH_ME75_1024,   # ME7.5 1024KB must be checked BEFORE generic ME7
     PROFILE_BOSCH_ME7,
     PROFILE_BOSCH_EDC15,
     PROFILE_BOSCH_EDC16,

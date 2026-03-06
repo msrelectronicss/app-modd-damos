@@ -32,6 +32,12 @@ try:
 except ImportError:
     pass  # Allow running standalone for development
 
+try:
+    from ui.gui.tuning_panel import TuningPanel
+    _TUNING_PANEL_AVAILABLE = True
+except ImportError:
+    _TUNING_PANEL_AVAILABLE = False
+
 
 # =============================================================================
 # Application Constants
@@ -314,6 +320,28 @@ class MainWindow:
         tools_menu.add_command(label="Run Script...",       command=self._run_script)
         tools_menu.add_command(label="Script Editor...",    command=self._open_script_editor)
 
+        # ECU Tuning menu
+        ecu_menu = tk.Menu(self.menubar, tearoff=0, **self._menu_style())
+        self.menubar.add_cascade(label="ECU Tuning", menu=ecu_menu)
+        ecu_menu.add_command(label="Detectar ECU (VIN / SW / HW)",
+                             command=self._ecu_detect,
+                             accelerator="Ctrl+E")
+        ecu_menu.add_separator()
+        ecu_menu.add_command(label="Stage 1 – Remap básico",
+                             command=lambda: self._ecu_stage(1))
+        ecu_menu.add_command(label="Stage 2 – Hardware upgrades",
+                             command=lambda: self._ecu_stage(2))
+        ecu_menu.add_command(label="Stage 3 – Full build",
+                             command=lambda: self._ecu_stage(3))
+        ecu_menu.add_separator()
+        ecu_menu.add_command(label="Pops & Bang...",
+                             command=self._ecu_show_tuning_tab)
+        ecu_menu.add_command(label="Anulaciones...",
+                             command=self._ecu_show_tuning_tab)
+        ecu_menu.add_separator()
+        ecu_menu.add_command(label="Mostrar Panel ECU Tuning",
+                             command=self._ecu_show_tuning_tab)
+
         # Help menu
         help_menu = tk.Menu(self.menubar, tearoff=0, **self._menu_style())
         self.menubar.add_cascade(label="Help", menu=help_menu)
@@ -364,6 +392,8 @@ class MainWindow:
             ("⚡ Analyze", self._analyze_file),
             ("|",          None),
             ("▶ Script",   self._run_script),
+            ("|",          None),
+            ("🔧 ECU",     self._ecu_show_tuning_tab),
         ]
 
         for label, cmd in buttons:
@@ -519,6 +549,69 @@ class MainWindow:
         struct_frame = tk.Frame(info_notebook, bg=COLORS["panel_bg"])
         info_notebook.add(struct_frame, text="Structure")
         self._setup_structure_panel(struct_frame)
+
+        # ECU Tuning tab
+        self._info_notebook = info_notebook   # keep reference for programmatic switching
+        self._tuning_panel_widget = None
+        if _TUNING_PANEL_AVAILABLE:
+            tuning_frame = tk.Frame(info_notebook, bg="#0D0D14")
+            info_notebook.add(tuning_frame, text="🔧 ECU Tuning")
+            try:
+                self._tuning_panel_widget = TuningPanel(
+                    tuning_frame,
+                    get_data=self._tuning_get_data,
+                    set_data=self._tuning_set_data,
+                )
+                self._tuning_panel_widget.pack(fill="both", expand=True)
+            except Exception:
+                pass
+
+    def _tuning_get_data(self) -> Optional[bytes]:
+        """Return current tab ROM bytes for the tuning panel."""
+        if self.current_tab_idx < 0 or not self.tabs:
+            return None
+        return bytes(self.tabs[self.current_tab_idx].data)
+
+    def _tuning_set_data(self, data: bytes) -> None:
+        """Receive modified ROM from tuning panel and refresh editor."""
+        if self.current_tab_idx < 0 or not self.tabs:
+            return
+        tab = self.tabs[self.current_tab_idx]
+        tab.data = bytearray(data)
+        tab.mark_modified()
+        self._refresh_tab_bar()
+        self._render_hex()
+        self._set_status(
+            f"ECU modificado — {len(data):,} bytes | guardado pendiente"
+        )
+
+    def _ecu_detect(self) -> None:
+        """Trigger ECU detection from menu / keybinding."""
+        self._ecu_show_tuning_tab()
+        if self._tuning_panel_widget:
+            self._tuning_panel_widget._on_detect()
+
+    def _ecu_stage(self, stage_num: int) -> None:
+        """Apply a stage directly from the menu."""
+        self._ecu_show_tuning_tab()
+        if not self._tuning_panel_widget:
+            return
+        try:
+            from formats.ecu_profiles import StageLevel
+            stage = StageLevel(stage_num)
+            self._tuning_panel_widget._on_stage(stage, f"Stage {stage_num}")
+        except Exception as exc:
+            messagebox.showerror("Error Stage", str(exc))
+
+    def _ecu_show_tuning_tab(self) -> None:
+        """Switch right panel to the ECU Tuning tab."""
+        if not hasattr(self, "_info_notebook"):
+            return
+        nb = self._info_notebook
+        for idx in range(nb.index("end")):
+            if "ECU" in nb.tab(idx, "text"):
+                nb.select(idx)
+                break
 
     def _setup_byte_info(self, parent: tk.Frame) -> None:
         """Byte info panel showing current byte in various formats."""
@@ -713,6 +806,7 @@ class MainWindow:
         root.bind("<Control-minus>",   lambda e: self._zoom_out())
         root.bind("<Control-Tab>",     lambda e: self._next_tab())
         root.bind("<Control-Shift-Tab>", lambda e: self._prev_tab())
+        root.bind("<Control-e>",       lambda e: self._ecu_detect())
 
     # -------------------------------------------------------------------------
     # Hex Display
